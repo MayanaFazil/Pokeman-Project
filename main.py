@@ -12,23 +12,30 @@ POKEAPI_BASE = "https://pokeapi.co/api/v2/pokemon/"
 
 
 def json_resp(content: dict, status_code: int = 200):
+    """Helper to ensure JSON responses always have correct content-type + status."""
     return JSONResponse(content=content, status_code=status_code)
 
 
 @app.get("/health")
 async def health():
+    """Health check endpoint."""
     return json_resp({"status": "ok"}, status_code=200)
 
 
 @app.get("/pokemon-info")
-async def pokemon_info(name: Optional[str] = Query(None, description="Pokemon name (case-sensitive, lowercase only)")):
+async def pokemon_info(name: Optional[str] = Query(None, description="Pokémon name (lowercase only)")):
+    # Missing or empty query param
     if not name or not name.strip():
         return json_resp({"error": "missing 'name' query parameter"}, status_code=400)
 
     raw_name = name.strip()
 
-    # ✅ Rule: only lowercase letters, digits, hyphens allowed
+    # ✅ Rule: only lowercase letters, digits, and hyphens allowed
     if not re.fullmatch(r"[a-z0-9\-]+", raw_name):
+        return json_resp({"error": "Invalid Pokémon name"}, status_code=400)
+
+    # ❌ Reject purely numeric input (PokéAPI would treat it as ID, but spec requires names only)
+    if raw_name.isdigit():
         return json_resp({"error": "Invalid Pokémon name"}, status_code=400)
 
     url = POKEAPI_BASE + raw_name
@@ -60,6 +67,7 @@ async def pokemon_info(name: Optional[str] = Query(None, description="Pokemon na
                     return json_resp({"error": "upstream returned unexpected data"}, status_code=502)
                 return json_resp(result, status_code=200)
 
+            # Handle unexpected upstream errors
             if 500 <= resp.status_code < 600:
                 raise httpx.HTTPStatusError("Upstream 5xx", request=resp.request, response=resp)
 
