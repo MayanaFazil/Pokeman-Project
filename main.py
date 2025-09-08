@@ -1,6 +1,6 @@
-# main.py
 from typing import Optional
 import asyncio
+import re
 
 from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
@@ -10,29 +10,44 @@ app = FastAPI(title="Pokémon Gateway")
 
 POKEAPI_BASE = "https://pokeapi.co/api/v2/pokemon/"
 
+
 def json_resp(content: dict, status_code: int = 200):
-    # Ensure Content-Type = application/json is present via JSONResponse
+    """Ensure Content-Type = application/json via JSONResponse"""
     return JSONResponse(content=content, status_code=status_code)
+
 
 @app.get("/health")
 async def health():
+    """Health check endpoint"""
     return json_resp({"status": "ok"}, status_code=200)
+
 
 @app.get("/pokemon-info")
 async def pokemon_info(name: Optional[str] = Query(None, description="Pokemon name (case-insensitive)")):
+    """Fetch simplified Pokémon info from PokéAPI"""
+
+    # 1. Missing param
     if not name or not name.strip():
         return json_resp({"error": "missing 'name' query parameter"}, status_code=400)
 
     pokemon_name = name.strip().lower()
+
+    # 2. Validation: only allow letters and hyphen
+    if not re.fullmatch(r"[a-z\-]+", pokemon_name):
+        return json_resp({"error": "Invalid Pokémon name"}, status_code=400)
+
     url = POKEAPI_BASE + pokemon_name
 
+    # Retry settings
     max_retries = 3
     backoff_base = 0.5
+
     for attempt in range(1, max_retries + 1):
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(url)
 
+            # 3. Handle errors
             if resp.status_code == 404:
                 return json_resp({"error": "Pokemon not found"}, status_code=404)
 
@@ -41,10 +56,12 @@ async def pokemon_info(name: Optional[str] = Query(None, description="Pokemon na
                 try:
                     result = {
                         "name": data.get("name"),
-                        "type": (data.get("types") or [])[0]["type"]["name"] if data.get("types") else None,
+                        "type": (data.get("types") or [])[0]["type"]["name"]
+                        if data.get("types") else None,
                         "height": data.get("height"),
                         "weight": data.get("weight"),
-                        "first_ability": (data.get("abilities") or [])[0]["ability"]["name"] if data.get("abilities") else None,
+                        "first_ability": (data.get("abilities") or [])[0]["ability"]["name"]
+                        if data.get("abilities") else None,
                     }
                 except Exception:
                     return json_resp({"error": "upstream returned unexpected data"}, status_code=502)
