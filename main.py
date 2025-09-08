@@ -12,33 +12,27 @@ POKEAPI_BASE = "https://pokeapi.co/api/v2/pokemon/"
 
 
 def json_resp(content: dict, status_code: int = 200):
-    """Ensure Content-Type = application/json via JSONResponse"""
     return JSONResponse(content=content, status_code=status_code)
 
 
 @app.get("/health")
 async def health():
-    """Health check endpoint"""
     return json_resp({"status": "ok"}, status_code=200)
 
 
 @app.get("/pokemon-info")
-async def pokemon_info(name: Optional[str] = Query(None, description="Pokemon name (case-insensitive)")):
-    """Fetch simplified Pokémon info from PokéAPI"""
-
-    # 1. Missing param
+async def pokemon_info(name: Optional[str] = Query(None, description="Pokemon name (case-sensitive, lowercase only)")):
     if not name or not name.strip():
         return json_resp({"error": "missing 'name' query parameter"}, status_code=400)
 
-    pokemon_name = name.strip().lower()
+    raw_name = name.strip()
 
-    # 2. Validation: only allow letters and hyphen
-    if not re.fullmatch(r"[a-z\-]+", pokemon_name):
+    # ✅ Rule: only lowercase letters, digits, hyphens allowed
+    if not re.fullmatch(r"[a-z0-9\-]+", raw_name):
         return json_resp({"error": "Invalid Pokémon name"}, status_code=400)
 
-    url = POKEAPI_BASE + pokemon_name
+    url = POKEAPI_BASE + raw_name
 
-    # Retry settings
     max_retries = 3
     backoff_base = 0.5
 
@@ -47,7 +41,6 @@ async def pokemon_info(name: Optional[str] = Query(None, description="Pokemon na
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(url)
 
-            # 3. Handle errors
             if resp.status_code == 404:
                 return json_resp({"error": "Pokemon not found"}, status_code=404)
 
