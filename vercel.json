@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "builds": [
+    { "src": "main.py", "use": "@vercel/python" }
+  ],
+  "routes": [
+    { "src": "/pokemon-info", "dest": "main.py" },
+    { "src": "/health", "dest": "main.py" }
+  ]
+}
